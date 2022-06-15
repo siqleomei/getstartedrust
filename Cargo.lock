@@ -47,15 +47,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "api"
-version = "0.1.0"
-dependencies = [
- "diesel",
- "dotenv",
- "rocket",
-]
-
-[[package]]
 name = "async-stream"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -432,6 +423,15 @@ dependencies = [
  "cfg-if",
  "libc",
  "wasi",
+]
+
+[[package]]
+name = "getstartedrust"
+version = "0.1.0"
+dependencies = [
+ "diesel",
+ "dotenv",
+ "rocket",
 ]
 
 [[package]]

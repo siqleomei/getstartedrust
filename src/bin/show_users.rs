@@ -1,12 +1,12 @@
 extern crate diesel;
-extern crate api;
+extern crate getstartedrust;
 
 use self::models::*;
-use self::api::*;
+use self::getstartedrust::*;
 use diesel::prelude::*;
 
 fn main() {
-    use api::schema::users::dsl::*;
+    use getstartedrust::schema::users::dsl::*;
 
     let connection = establish_connection();
     let results = users
