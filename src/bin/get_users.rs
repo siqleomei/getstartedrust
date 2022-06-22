@@ -1,9 +1,9 @@
 #[macro_use] extern crate rocket;
+use getstartedrust::{models::User, establish_connection};
 use rocket::serde::json::Json;
 
-pub mod models;
-pub mod schema;
-pub mod services;
+extern crate getstartedrust;
+use diesel::prelude::*;
 
 #[get("/users")]
 fn get_users() -> Json<Vec<User>> {
