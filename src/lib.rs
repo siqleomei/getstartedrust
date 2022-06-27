@@ -2,26 +2,28 @@
 extern crate diesel;
 extern crate dotenvy;
 
-pub mod schema;
 pub mod models;
+pub mod schema;
 
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use dotenvy::dotenv;
-use std::{env, thread, sync::{mpsc, Mutex, Arc}};
+use std::{
+    env,
+    sync::{mpsc, Arc, Mutex},
+    thread,
+};
 
 pub fn establish_connection() -> SqliteConnection {
     dotenv().ok();
-    let database_url = 
-        env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     SqliteConnection::establish(&database_url)
         .expect(&format!("Error connection to {}", database_url))
 }
 
 pub struct ThreadPool {
     workers: Vec<Worker>,
-    sender: mpsc::Sender<Job>,
+    sender: mpsc::Sender<Message>,
 }
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
@@ -46,32 +48,74 @@ impl ThreadPool {
         for id in 0..size {
             workers.push(Worker::new(id, Arc::clone(&receiver)));
         }
-        
+
         ThreadPool { workers, sender }
     }
 
+    /// Responsável por enviar a mensagem para o Worker trabalhar na ação desejada para a thread
     pub fn execute<F>(&self, f: F)
-    where F: FnOnce() + Send + 'static,
+    where
+        F: FnOnce() + Send + 'static,
     {
         let job = Box::new(f);
-        self.sender.send(job).unwrap();
+        self.sender.send(Message::NewJob(job)).unwrap();
     }
 }
 
+// Responsável por finalizar a thread de forma elegante após executar sua função
+impl Drop for ThreadPool {
+    fn drop(&mut self) {
+        println!("Sending terminate message to all workers");
+
+        for _ in &self.workers {
+            self.sender.send(Message::Terminate).unwrap();
+        }
+
+        println!("Shutting down all workers.");
+
+        for worker in &mut self.workers {
+            println!("Shutting down worker {}", worker.id);
+
+            if let Some(thread) = worker.thread.take() {
+                thread.join().unwrap();
+            }
+        }
+    }
+}
+
+// Definição da estrutura que realizará a ponte entre o ThreadPool e seus Jobs
 pub struct Worker {
     id: usize,
-    thread: thread::JoinHandle<()>,
+    thread: Option<thread::JoinHandle<()>>,
 }
 
+/// Implementação responsável por receber uma ação e chamar a execução da thread para processar esta ação.
 impl Worker {
-    pub fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
+    pub fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Message>>>) -> Worker {
         let thread = thread::spawn(move || loop {
-            let job = receiver.lock().unwrap().recv().unwrap();
+            let message = receiver.lock().unwrap().recv().unwrap();
 
-            println!("Worker {} got a job; executing.", id);
+            match message {
+                Message::NewJob(job) => {
+                    println!("Worker {} got a job; executing.", id);
+
+                    job();
+                }
+                Message::Terminate => {
+                    println!("Worker {} was told to terminate", id);
+                    break;
+                }
+            }
             
-            job();
         });
-        Worker { id, thread }
+        Worker {
+            id,
+            thread: Some(thread),
+        }
     }
+}
+
+pub enum Message {
+    NewJob(Job),
+    Terminate,
 }
